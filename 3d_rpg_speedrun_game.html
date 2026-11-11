@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Speedpia 3D RPG</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            font-family: 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #061109;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        @media (max-width: 640px) {
+            .hotbar-container {
+                bottom: 5.5rem !important;
+                transform: translateX(-50%) scale(0.88);
+            }
+            .joystick-container {
+                bottom: 1.25rem !important;
+                left: 1rem !important;
+                width: 6.5rem !important;
+                height: 6.5rem !important;
+            }
+            .attack-btn-container {
+                bottom: 1.25rem !important;
+                right: 1rem !important;
+                width: 4.25rem !important;
+                height: 4.25rem !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white select-none">
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay HUD -->
+    <div id="hud" class="absolute inset-0 z-10 pointer-events-none hidden">
+        <!-- Crosshair -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="w-3.5 h-3.5 border-2 border-white/70 rounded-full bg-white/20"></div>
+        </div>
+
+        <!-- Desktop Controls Guide Toast -->
+        <div class="hidden sm:flex absolute top-16 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur text-slate-300 text-[11px] px-3 py-1.5 rounded-full border border-white/10 pointer-events-none gap-2">
+            <span>⌨️ <b>W,A,S,D</b> 이동</span>
+            <span>•</span>
+            <span><b>화면 클릭</b>시 마우스 고정 / <b>ESC</b> 해제</span>
+            <span>•</span>
+            <span><b>Space / 클릭</b> 공격</span>
+        </div>
+
+        <!-- Top Header Controls -->
+        <div class="absolute top-3 inset-x-3 flex justify-between items-start pointer-events-none">
+            <!-- Profile & Stats -->
+            <div class="flex items-center gap-2.5 bg-emerald-950/85 backdrop-blur border border-emerald-500/20 p-2 pr-3.5 rounded-2xl shadow-xl pointer-events-auto">
+                <div id="classIconBadge" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center font-black text-xl shadow-inner text-slate-900">
+                    ⚔️
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <span id="playerName" class="font-bold text-xs text-slate-100">용사님</span>
+                        <span id="playerLevel" class="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-1.5 py-0.5 rounded-full border border-emerald-500/30">Lv.1</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-300 mt-0.5">
+                        <span class="text-[11px]">골드: <strong id="goldText" class="text-amber-400 font-extrabold">0G</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speedrun Timer & Target Counter HUD -->
+            <div class="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-amber-400/30 px-3.5 py-2 rounded-2xl shadow-xl pointer-events-auto">
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px] text-amber-300 font-bold uppercase tracking-wider">⏱️ SPEEDRUN</span>
+                    <span id="timerText" class="text-sm font-black text-yellow-400 font-mono">00:00.00</span>
+                </div>
+                <div class="h-6 w-px bg-white/20 mx-1"></div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">👾 REMAINING</span>
+                    <span id="monsterCountText" class="text-sm font-black text-emerald-400">15 / 15</span>
+                </div>
+            </div>
+
+            <!-- Top Right Settings -->
+            <div class="flex gap-2 pointer-events-auto">
+                <button onclick="openSettingsModal()" class="p-2 bg-slate-800/85 hover:bg-slate-700/85 text-white rounded-2xl shadow border border-white/10 text-xs transition active:scale-95">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Item Hotbar -->
+        <div class="hotbar-container absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 p-1.5 bg-slate-900/90 backdrop-blur border border-white/20 rounded-2xl shadow-2xl pointer-events-auto z-20 transition-all">
+            <!-- Weapon Slot -->
+            <div onclick="selectHotbarSlot(0)" id="hotbar-0" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-amber-500/30 border-2 border-amber-400 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative">
+                <span id="hotbarWeaponIcon">⚔️</span>
+                <span class="absolute top-0.5 left-1 text-[9px] font-black text-amber-300/70 hidden sm:inline">1</span>
+            </div>
+            <!-- Sub-Weapon/Tool Slot -->
+            <div onclick="selectHotbarSlot(1)" id="hotbar-1" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800/60 border border-white/10 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative">
+                <span id="hotbarSubWeaponIcon">🛡️</span>
+                <span class="absolute top-0.5 left-1 text-[9px] font-black text-amber-300/70 hidden sm:inline">2</span>
+            </div>
+            <!-- Consumable: Health Potion -->
+            <div onclick="selectHotbarSlot(2)" id="hotbar-2" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800/60 border border-white/10 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative">
+                🧪
+                <span class="absolute top-0.5 left-1 text-[9px] font-black text-amber-300/70 hidden sm:inline">3</span>
+                <span id="potionCountText" class="absolute bottom-0.5 right-1 text-[10px] font-black text-amber-300">x5</span>
+            </div>
+            <!-- Consumable: Apple -->
+            <div onclick="selectHotbarSlot(3)" id="hotbar-3" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800/60 border border-white/10 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative">
+                🍎
+                <span class="absolute top-0.5 left-1 text-[9px] font-black text-amber-300/70 hidden sm:inline">4</span>
+                <span id="appleCountText" class="absolute bottom-0.5 right-1 text-[10px] font-black text-amber-300">x3</span>
+            </div>
+        </div>
+
+        <!-- Touch Joystick Layout (Bottom Left) -->
+        <div id="joystickZone" class="joystick-container absolute bottom-5 left-5 w-28 h-28 sm:w-32 sm:h-32 rounded-full border-2 border-white/20 bg-slate-900/40 backdrop-blur pointer-events-auto flex items-center justify-center touch-none z-10">
+            <div id="joystickKnob" class="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 shadow-lg border border-white/40 transform transition-transform duration-75"></div>
+        </div>
+
+        <!-- Attack Button Layout (Bottom Right) -->
+        <button id="attackBtn" onclick="useActiveItem()" class="attack-btn-container absolute bottom-5 right-5 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 border-2 border-white/40 shadow-2xl flex items-center justify-center text-2xl sm:text-3xl pointer-events-auto transition active:scale-90 z-10">
+            ⚔️
+        </button>
+    </div>
+
+    <!-- Character Selection Modal -->
+    <div id="characterModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+        <div class="bg-slate-900 border border-white/10 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl space-y-5">
+            <h2 class="text-2xl font-black text-amber-400">⚡ 3D 스피드런 타임어택</h2>
+            <p class="text-xs text-slate-400">숲속에 있는 몬스터 15마리를 가장 빠르게 처치하세요!</p>
+            
+            <div class="grid grid-cols-3 gap-2.5">
+                <button id="classBtn-knight" onclick="selectClass('knight')" class="p-3 rounded-2xl border-2 border-emerald-400 bg-emerald-500/20 flex flex-col items-center gap-1 transition">
+                    <span class="text-3xl">⚔️</span>
+                    <span class="text-xs font-bold">기사 (검)</span>
+                </button>
+                <button id="classBtn-mage" onclick="selectClass('mage')" class="p-3 rounded-2xl border-2 border-white/10 bg-white/5 flex flex-col items-center gap-1 transition">
+                    <span class="text-3xl">🔮</span>
+                    <span class="text-xs font-bold">마법사 (지팡이)</span>
+                </button>
+                <button id="classBtn-archer" onclick="selectClass('archer')" class="p-3 rounded-2xl border-2 border-white/10 bg-white/5 flex flex-col items-center gap-1 transition">
+                    <span class="text-3xl">🏹</span>
+                    <span class="text-xs font-bold">궁수 (활)</span>
+                </button>
+            </div>
+
+            <button onclick="startAdventure()" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black rounded-2xl shadow-lg hover:brightness-110 active:scale-95 transition">
+                🚀 스피드런 도전 시작
+            </button>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="victoryModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 hidden">
+        <div class="bg-slate-900 border border-amber-400/40 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl space-y-5">
+            <div class="text-5xl">🏆</div>
+            <h2 class="text-2xl font-black text-yellow-400">스피드런 클리어!</h2>
+            <p class="text-xs text-slate-300">모든 몬스터를 성공적으로 처치했습니다!</p>
+
+            <div class="bg-slate-800/80 border border-white/10 p-4 rounded-2xl space-y-2">
+                <div class="text-xs text-slate-400 font-bold">최종 기록</div>
+                <div id="finalRecordText" class="text-3xl font-black text-emerald-400 font-mono">00:00.00</div>
+            </div>
+
+            <button onclick="restartSpeedrun()" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black rounded-2xl shadow-lg hover:brightness-110 active:scale-95 transition">
+                🔄 재도전하기
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 hidden">
+        <div class="bg-slate-900 border border-white/10 p-6 rounded-3xl max-w-xs w-full shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <span>⚙️</span> <span>설정</span>
+            </h3>
+
+            <div class="space-y-2">
+                <label class="block text-xs text-slate-300">마우스 감도</label>
+                <input type="range" id="sensSlider" min="0.0005" max="0.0050" step="0.0002" value="0.0020" onchange="updateSensitivity(this.value)" class="w-full accent-emerald-500">
+            </div>
+
+            <button onclick="closeSettingsModal()" class="w-full py-2.5 bg-slate-800 text-slate-200 font-bold rounded-xl text-xs hover:bg-slate-700 transition">닫기</button>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer;
+        let rightHandGroup, fpWeaponMesh, swordAuraGroup;
+        const monsters = [];
+        const damageTexts = [];
+        const MAP_SIZE = 300;
+        const TOTAL_MONSTERS = 15;
+
+        let selectedClass = 'knight';
+        let activeHotbarSlot = 0;
+
+        let startTime = 0;
+        let timerInterval = null;
+        let isGameFinished = false;
+
+        const inventory = { potions: 5, apples: 3 };
+
+        const keysPressed = { w: false, a: false, s: false, d: false };
+
+        const gameState = {
+            player: { hp: 100, maxHp: 100, exp: 0, gold: 0, level: 1 },
+            isAttacking: false,
+            attackTimer: 0,
+            cameraSens: 0.0012, // Ultra low smooth sensitivity
+            touchJoystickId: null
+        };
+
+        const playerPos = new THREE.Vector3(0, 1.6, 0);
+        let targetYaw = 0;
+        let currentYaw = 0;
+
+        let joystickActive = false;
+        let joystickVector = { x: 0, y: 0 };
+        const joystickRadius = 40;
+
+        function initEngine() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+
+            scene.background = new THREE.Color(0x0a1c12);
+            scene.fog = new THREE.FogExp2(0x0a1c12, 0.012);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            swordAuraGroup = new THREE.Group();
+            scene.add(swordAuraGroup);
+
+            const ambientLight = new THREE.AmbientLight(0xdcfce7, 0.6);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfef08a, 1.2);
+            sunLight.position.set(50, 100, 30);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+
+            const groundGeo = new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x143823, roughness: 0.95 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const grid = new THREE.GridHelper(MAP_SIZE, 60, 0x22c55e, 0x14532d);
+            grid.position.y = 0.01;
+            scene.add(grid);
+
+            buildForestEnvironment();
+            createMinecraftRightHand();
+            spawnTargetMonsters();
+            setupTouchListeners();
+            setupKeyboardListeners();
+            setupInstantMouseLook();
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function buildForestEnvironment() {
+            const treeGeoTrunk = new THREE.CylinderGeometry(0.4, 0.6, 4, 8);
+            const treeMatTrunk = new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.9 });
+            const treeGeoLeaves = new THREE.ConeGeometry(2.5, 6, 8);
+            const treeMatLeaves = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+
+            for (let i = 0; i < 180; i++) {
+                const x = (Math.random() - 0.5) * (MAP_SIZE - 20);
+                const z = (Math.random() - 0.5) * (MAP_SIZE - 20);
+
+                if (Math.abs(x) < 12 && Math.abs(z) < 12) continue;
+
+                const treeGroup = new THREE.Group();
+                const trunk = new THREE.Mesh(treeGeoTrunk, treeMatTrunk);
+                trunk.position.y = 2;
+                trunk.castShadow = true;
+
+                const leaves = new THREE.Mesh(treeGeoLeaves, treeMatLeaves);
+                leaves.position.y = 5.5;
+                leaves.castShadow = true;
+
+                treeGroup.add(trunk);
+                treeGroup.add(leaves);
+                treeGroup.position.set(x, 0, z);
+
+                const scale = 0.7 + Math.random() * 0.6;
+                treeGroup.scale.set(scale, scale, scale);
+
+                scene.add(treeGroup);
+            }
+        }
+
+        function createMinecraftRightHand() {
+            if (rightHandGroup) camera.remove(rightHandGroup);
+
+            rightHandGroup = new THREE.Group();
+
+            const armGeo = new THREE.BoxGeometry(0.12, 0.45, 0.12);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 });
+            const arm = new THREE.Mesh(armGeo, armMat);
+            arm.position.set(0, -0.15, 0);
+            arm.castShadow = true;
+            rightHandGroup.add(arm);
+
+            let weaponGeo, weaponMat;
+
+            if (activeHotbarSlot === 0) {
+                if (selectedClass === 'knight') {
+                    weaponGeo = new THREE.BoxGeometry(0.06, 0.95, 0.06);
+                    weaponMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.9, roughness: 0.2 });
+                } else if (selectedClass === 'mage') {
+                    weaponGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.1);
+                    weaponMat = new THREE.MeshStandardMaterial({ color: 0xc084fc, roughness: 0.3 });
+                } else {
+                    weaponGeo = new THREE.TorusGeometry(0.28, 0.025, 8, 16, Math.PI);
+                    weaponMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b });
+                }
+            } else if (activeHotbarSlot === 1) {
+                if (selectedClass === 'knight') {
+                    weaponGeo = new THREE.BoxGeometry(0.4, 0.5, 0.04);
+                    weaponMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.4 });
+                } else {
+                    weaponGeo = new THREE.BoxGeometry(0.08, 0.7, 0.08);
+                    weaponMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+                }
+            } else if (activeHotbarSlot === 2) {
+                weaponGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8);
+                weaponMat = new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.8 });
+            } else {
+                weaponGeo = new THREE.SphereGeometry(0.12, 12, 12);
+                weaponMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 });
+            }
+
+            fpWeaponMesh = new THREE.Mesh(weaponGeo, weaponMat);
+            fpWeaponMesh.position.set(0, 0.2, -0.1);
+            fpWeaponMesh.rotation.set(-0.3, 0, -0.2);
+            rightHandGroup.add(fpWeaponMesh);
+
+            const aspect = window.innerWidth / window.innerHeight;
+            const handX = aspect < 1 ? 0.35 : 0.42;
+            rightHandGroup.position.set(handX, -0.38, -0.55);
+            rightHandGroup.rotation.set(0.15, -0.25, 0);
+
+            camera.add(rightHandGroup);
+            scene.add(camera);
+        }
+
+        function createMonsterMesh() {
+            const mGroup = new THREE.Group();
+            const mGeo = new THREE.BoxGeometry(1.2, 1.6, 1.2);
+            const mMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 });
+            const mesh = new THREE.Mesh(mGeo, mMat);
+            mesh.position.y = 0.8;
+            mesh.castShadow = true;
+            mGroup.add(mesh);
+
+            const eyeGeo = new THREE.SphereGeometry(0.14, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-0.3, 1.2, 0.6);
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(0.3, 1.2, 0.6);
+            mGroup.add(eyeL);
+            mGroup.add(eyeR);
+
+            mGroup.userData = { hp: 40, maxHp: 40, alive: true };
+            return mGroup;
+        }
+
+        function spawnTargetMonsters() {
+            monsters.forEach(m => scene.remove(m));
+            monsters.length = 0;
+
+            for (let i = 0; i < TOTAL_MONSTERS; i++) {
+                const mGroup = createMonsterMesh();
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 15 + Math.random() * 70;
+
+                const spawnX = Math.cos(angle) * dist;
+                const spawnZ = Math.sin(angle) * dist;
+
+                mGroup.position.set(spawnX, 0, spawnZ);
+                scene.add(mGroup);
+                monsters.push(mGroup);
+            }
+            updateMonsterCounter();
+        }
+
+        function startSpeedrunTimer() {
+            startTime = Date.now();
+            isGameFinished = false;
+            if (timerInterval) clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                if (isGameFinished) return;
+                const elapsed = Date.now() - startTime;
+                const mins = String(Math.floor(elapsed / 60000)).padStart(2, '0');
+                const secs = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
+                const ms = String(Math.floor((elapsed % 1000) / 10)).padStart(2, '0');
+                document.getElementById('timerText').innerText = `${mins}:${secs}.${ms}`;
+            }, 30);
+        }
+
+        function updateMonsterCounter() {
+            const remaining = monsters.filter(m => m.userData.alive).length;
+            document.getElementById('monsterCountText').innerText = `${remaining} / ${TOTAL_MONSTERS}`;
+
+            if (remaining === 0 && !isGameFinished) {
+                finishSpeedrun();
+            }
+        }
+
+        function finishSpeedrun() {
+            isGameFinished = true;
+            clearInterval(timerInterval);
+            const finalRecord = document.getElementById('timerText').innerText;
+            document.getElementById('finalRecordText').innerText = finalRecord;
+            document.getElementById('victoryModal').classList.remove('hidden');
+        }
+
+        function restartSpeedrun() {
+            document.getElementById('victoryModal').classList.add('hidden');
+            playerPos.set(0, 1.6, 0);
+            targetYaw = 0;
+            targetPitch = 0;
+            currentYaw = 0;
+            currentPitch = 0;
+            spawnTargetMonsters();
+            startSpeedrunTimer();
+        }
+
+        function selectHotbarSlot(idx) {
+            activeHotbarSlot = idx;
+            for (let i = 0; i < 4; i++) {
+                const slot = document.getElementById(`hotbar-${i}`);
+                if (i === idx) {
+                    slot.className = "w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-amber-500/30 border-2 border-amber-400 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative";
+                } else {
+                    slot.className = "w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800/60 border border-white/10 flex items-center justify-center text-xl sm:text-2xl shadow cursor-pointer transition transform active:scale-90 relative";
+                }
+            }
+
+            const attackBtn = document.getElementById('attackBtn');
+            if (idx === 0) {
+                attackBtn.innerText = selectedClass === 'knight' ? '⚔️' : (selectedClass === 'mage' ? '🔮' : '🏹');
+            } else if (idx === 1) {
+                attackBtn.innerText = selectedClass === 'knight' ? '🛡️' : '🗡️';
+            } else if (idx === 2) {
+                attackBtn.innerText = '🧪';
+            } else {
+                attackBtn.innerText = '🍎';
+            }
+
+            createMinecraftRightHand();
+        }
+
+        function setupKeyboardListeners() {
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (key === 'w' || key === 'arrowup') keysPressed.w = true;
+                if (key === 'a' || key === 'arrowleft') keysPressed.a = true;
+                if (key === 's' || key === 'arrowdown') keysPressed.s = true;
+                if (key === 'd' || key === 'arrowright') keysPressed.d = true;
+
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    useActiveItem();
+                }
+
+                if (['1', '2', '3', '4'].includes(e.key)) {
+                    selectHotbarSlot(parseInt(e.key) - 1);
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const key = e.key.toLowerCase();
+                if (key === 'w' || key === 'arrowup') keysPressed.w = false;
+                if (key === 'a' || key === 'arrowleft') keysPressed.a = false;
+                if (key === 's' || key === 'arrowdown') keysPressed.s = false;
+                if (key === 'd' || key === 'arrowright') keysPressed.d = false;
+            });
+        }
+
+        // MOUSE FOLLOW LOOK: Smoothly turns camera towards mouse position
+        // MOUSE POINTER LOCK: Lock cursor in center & rotate camera on movement
+        function setupInstantMouseLook() {
+            const container = document.getElementById('canvas-container');
+
+            // Click canvas to lock pointer
+            container.addEventListener('click', () => {
+                if (document.pointerLockElement !== container) {
+                    container.requestPointerLock();
+                }
+            });
+
+            // Handle pointer lock change
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === container) {
+                    // Pointer locked successfully
+                }
+            });
+
+            // Process mouse movement relative delta when pointer is locked
+            window.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === container) {
+                    const movementX = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+                    targetYaw -= movementX * gameState.cameraSens;
+                }
+            });
+
+            window.addEventListener('click', (e) => {
+                const target = e.target;
+                if (document.pointerLockElement === container) {
+                    playerAttack();
+                } else if (target.closest('#hud') && !target.closest('#attackBtn') && !target.closest('.hotbar-container')) {
+                    playerAttack();
+                }
+            });
+        }
+
+        function setupTouchListeners() {
+            const joystickZone = document.getElementById('joystickZone');
+            const knob = document.getElementById('joystickKnob');
+
+            joystickZone.addEventListener('pointerdown', (e) => {
+                joystickActive = true;
+                gameState.touchJoystickId = e.pointerId;
+                updateJoystick(e);
+            });
+
+            let touchLookActive = false;
+            let lastTouchX = 0;
+
+            window.addEventListener('pointerdown', (e) => {
+                const target = e.target;
+                if (target.closest('#hud') || target.closest('#characterModal') || target.closest('#settingsModal') || target.closest('#victoryModal')) {
+                    return;
+                }
+                if (e.pointerType !== 'mouse') {
+                    touchLookActive = true;
+                    lastTouchX = e.clientX;
+                }
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (joystickActive && e.pointerId === gameState.touchJoystickId) {
+                    updateJoystick(e);
+                }
+                if (touchLookActive && e.pointerType !== 'mouse') {
+                    const deltaX = e.clientX - lastTouchX;
+                    lastTouchX = e.clientX;
+
+                    targetYaw -= deltaX * gameState.cameraSens * 0.8;
+                }
+            });
+
+            const stopTouch = (e) => {
+                if (e.pointerId === gameState.touchJoystickId) {
+                    joystickActive = false;
+                    joystickVector = { x: 0, y: 0 };
+                    knob.style.transform = 'translate(0px, 0px)';
+                    gameState.touchJoystickId = null;
+                }
+                touchLookActive = false;
+            };
+
+            window.addEventListener('pointerup', stopTouch);
+            window.addEventListener('pointercancel', stopTouch);
+        }
+
+        function updateJoystick(e) {
+            const rect = document.getElementById('joystickZone').getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            let dx = e.clientX - centerX;
+            let dy = e.clientY - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > joystickRadius) {
+                dx = (dx / dist) * joystickRadius;
+                dy = (dy / dist) * joystickRadius;
+            }
+
+            document.getElementById('joystickKnob').style.transform = `translate(${dx}px, ${dy}px)`;
+            joystickVector.x = dx / joystickRadius;
+            joystickVector.y = dy / joystickRadius;
+        }
+
+        function useActiveItem() {
+            if (activeHotbarSlot === 0 || activeHotbarSlot === 1) {
+                playerAttack();
+            } else if (activeHotbarSlot === 2) {
+                usePotion();
+            } else if (activeHotbarSlot === 3) {
+                eatApple();
+            }
+        }
+
+        function usePotion() {
+            if (inventory.potions <= 0) {
+                show3DDamageText('물약이 부족합니다!', playerPos.x, playerPos.y + 0.5, playerPos.z, '#EF4444');
+                return;
+            }
+            inventory.potions--;
+            document.getElementById('potionCountText').innerText = `x${inventory.potions}`;
+            show3DDamageText('🧪 체력 회복! +30 HP', playerPos.x, playerPos.y + 0.5, playerPos.z, '#10B981');
+        }
+
+        function eatApple() {
+            if (inventory.apples <= 0) {
+                show3DDamageText('사과가 부족합니다!', playerPos.x, playerPos.y + 0.5, playerPos.z, '#EF4444');
+                return;
+            }
+            inventory.apples--;
+            document.getElementById('appleCountText').innerText = `x${inventory.apples}`;
+            show3DDamageText('🍎 냠냠! +15 HP', playerPos.x, playerPos.y + 0.5, playerPos.z, '#F59E0B');
+        }
+
+        function playerAttack() {
+            if (gameState.isAttacking) return;
+            gameState.isAttacking = true;
+            gameState.attackTimer = 0;
+
+            const auraGeo = new THREE.RingGeometry(0.2, 1.0, 16, 1, 0, Math.PI);
+            let auraColor = 0xf59e0b;
+            if (selectedClass === 'mage') auraColor = 0xa855f7;
+            if (selectedClass === 'archer') auraColor = 0x10b981;
+
+            const auraMat = new THREE.MeshBasicMaterial({ color: auraColor, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+            const aura = new THREE.Mesh(auraGeo, auraMat);
+            
+            const forwardX = -Math.sin(currentYaw);
+            const forwardZ = -Math.cos(currentYaw);
+
+            aura.position.set(playerPos.x + forwardX * 1.2, 1.2, playerPos.z + forwardZ * 1.2);
+            aura.rotation.x = Math.PI / 2;
+            aura.rotation.z = currentYaw;
+
+            aura.userData = { dirX: forwardX, dirZ: forwardZ, life: 0 };
+            swordAuraGroup.add(aura);
+
+            monsters.forEach(m => {
+                if (!m.userData.alive) return;
+                const dist = playerPos.distanceTo(m.position);
+                if (dist < 4.5) {
+                    m.userData.hp -= 20;
+                    show3DDamageText('-20', m.position.x, 1.8, m.position.z, '#EF4444');
+                    if (m.userData.hp <= 0) {
+                        m.userData.alive = false;
+                        m.visible = false;
+                        gameState.player.exp += 25;
+                        gameState.player.gold += 15;
+                        show3DDamageText('👾 처치 완료!', m.position.x, 2, m.position.z, '#F59E0B');
+                        updateHUD();
+                        updateMonsterCounter();
+                    }
+                }
+            });
+        }
+
+        function show3DDamageText(text, x, y, z, color) {
+            const el = document.createElement('div');
+            el.className = 'absolute font-black text-xs sm:text-sm pointer-events-none transition-all duration-700 z-30 drop-shadow whitespace-nowrap';
+            el.style.color = color;
+            el.innerText = text;
+            document.body.appendChild(el);
+            damageTexts.push({ el, pos: new THREE.Vector3(x, y, z), life: 1.0 });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Very smooth camera rotation tracking
+            currentYaw += (targetYaw - currentYaw) * 0.12;
+
+            let moveX = 0;
+            let moveY = 0;
+
+            if (joystickActive) {
+                moveX = joystickVector.x;
+                moveY = joystickVector.y;
+            } else {
+                if (keysPressed.w) moveY -= 1;
+                if (keysPressed.s) moveY += 1;
+                if (keysPressed.a) moveX -= 1;
+                if (keysPressed.d) moveX += 1;
+
+                if (moveX !== 0 && moveY !== 0) {
+                    moveX *= 0.7071;
+                    moveY *= 0.7071;
+                }
+            }
+
+            if (moveX !== 0 || moveY !== 0) {
+                const moveSpeed = 0.12;
+                const sinY = Math.sin(currentYaw);
+                const cosY = Math.cos(currentYaw);
+
+                const forwardX = -sinY * (-moveY);
+                const forwardZ = -cosY * (-moveY);
+
+                const strafeX = cosY * moveX;
+                const strafeZ = -sinY * moveX;
+
+                const nextX = playerPos.x + (forwardX + strafeX) * moveSpeed;
+                const nextZ = playerPos.z + (forwardZ + strafeZ) * moveSpeed;
+
+                const limit = MAP_SIZE / 2 - 2;
+                playerPos.x = Math.max(-limit, Math.min(limit, nextX));
+                playerPos.z = Math.max(-limit, Math.min(limit, nextZ));
+            }
+
+            camera.position.copy(playerPos);
+
+            // 카메라 시점을 기존보다 약간 아래쪽(y - 0.22)을 바라보도록 변경하여 각도를 아래로 조정
+            const targetLook = new THREE.Vector3(
+                playerPos.x - Math.sin(currentYaw),
+                playerPos.y - 0.22,
+                playerPos.z - Math.cos(currentYaw)
+            );
+            camera.lookAt(targetLook);
+
+            if (gameState.isAttacking && rightHandGroup) {
+                gameState.attackTimer += 0.18;
+                const swingPhase = Math.sin(gameState.attackTimer * Math.PI);
+                
+                rightHandGroup.rotation.x = 0.15 - swingPhase * 1.2;
+                rightHandGroup.rotation.y = -0.25 + swingPhase * 0.5;
+                rightHandGroup.rotation.z = -swingPhase * 0.8;
+                rightHandGroup.position.z = -0.55 + swingPhase * 0.15;
+                rightHandGroup.position.y = -0.38 - swingPhase * 0.1;
+
+                if (gameState.attackTimer >= 1.0) {
+                    gameState.isAttacking = false;
+                    rightHandGroup.rotation.set(0.15, -0.25, 0);
+                    const aspect = window.innerWidth / window.innerHeight;
+                    rightHandGroup.position.set(aspect < 1 ? 0.35 : 0.42, -0.38, -0.55);
+                }
+            }
+
+            for (let i = swordAuraGroup.children.length - 1; i >= 0; i--) {
+                const aura = swordAuraGroup.children[i];
+                aura.userData.life += 0.06;
+                aura.position.x += aura.userData.dirX * 0.35;
+                aura.position.z += aura.userData.dirZ * 0.35;
+                aura.material.opacity = 1 - aura.userData.life;
+                if (aura.userData.life >= 1.0) {
+                    swordAuraGroup.remove(aura);
+                }
+            }
+
+            damageTexts.forEach((d, idx) => {
+                d.life -= 0.02;
+                d.pos.y += 0.02;
+                const proj = d.pos.clone().project(camera);
+                const sx = (proj.x * 0.5 + 0.5) * window.innerWidth;
+                const sy = (-proj.y * 0.5 + 0.5) * window.innerHeight;
+                d.el.style.left = `${sx}px`;
+                d.el.style.top = `${sy}px`;
+                d.el.style.opacity = d.life;
+
+                if (d.life <= 0) {
+                    d.el.remove();
+                    damageTexts.splice(idx, 1);
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        function selectClass(cls) {
+            selectedClass = cls;
+            ['knight', 'mage', 'archer'].forEach(c => {
+                const btn = document.getElementById(`classBtn-${c}`);
+                if (c === cls) {
+                    btn.className = "p-3 rounded-2xl border-2 border-emerald-400 bg-emerald-500/20 flex flex-col items-center gap-1 transition";
+                } else {
+                    btn.className = "p-3 rounded-2xl border-2 border-white/10 bg-white/5 flex flex-col items-center gap-1 transition";
+                }
+            });
+
+            const badge = document.getElementById('classIconBadge');
+            const weaponIcon = document.getElementById('hotbarWeaponIcon');
+            const subWeaponIcon = document.getElementById('hotbarSubWeaponIcon');
+
+            if (cls === 'knight') {
+                badge.innerText = '⚔️';
+                weaponIcon.innerText = '⚔️';
+                subWeaponIcon.innerText = '🛡️';
+            } else if (cls === 'mage') {
+                badge.innerText = '🔮';
+                weaponIcon.innerText = '🔮';
+                subWeaponIcon.innerText = '🗡️';
+            } else {
+                badge.innerText = '🏹';
+                weaponIcon.innerText = '🏹';
+                subWeaponIcon.innerText = '🗡️';
+            }
+        }
+
+        function startAdventure() {
+            document.getElementById('characterModal').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            selectHotbarSlot(0);
+            updateHUD();
+            startSpeedrunTimer();
+        }
+
+        function updateHUD() {
+            document.getElementById('goldText').innerText = `${gameState.player.gold}G`;
+            document.getElementById('playerLevel').innerText = `Lv.${Math.floor(gameState.player.exp / 100) + 1}`;
+        }
+
+        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); }
+        function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
+
+        function updateSensitivity(val) {
+            gameState.cameraSens = parseFloat(val);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            if (rightHandGroup) {
+                const aspect = window.innerWidth / window.innerHeight;
+                rightHandGroup.position.x = aspect < 1 ? 0.35 : 0.42;
+            }
+        }
+
+        window.onload = function() {
+            initEngine();
+            selectClass('knight');
+        };
+    </script>
+</body>
+</html>
